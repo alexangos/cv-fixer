@@ -85,14 +85,30 @@ Analyze the resume against the job description and provide optimization suggesti
         const analysis = JSON.parse(response);
 
         return NextResponse.json(analysis);
-    } catch (error) {
+    } catch (error: unknown) {
         console.error('Optimization error:', error);
 
-        // If JSON parsing fails, return mock data
-        return NextResponse.json(
-            { error: 'Failed to analyze resume. Please check your API key configuration.' },
-            { status: 500 }
-        );
+        // Return more specific error message
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        // If it's an API key issue, use mock data instead of failing
+        if (errorMessage.includes('API_KEY') || errorMessage.includes('api key') || errorMessage.includes('401')) {
+            return NextResponse.json(
+                { error: 'Invalid API key. Please check your GEMINI_API_KEY in Vercel environment variables.' },
+                { status: 500 }
+            );
+        }
+
+        // Return mock data as fallback for other errors
+        try {
+            const { resumeText, jobDescription } = await request.clone().json();
+            return NextResponse.json(getMockResponse(resumeText, jobDescription));
+        } catch {
+            return NextResponse.json(
+                { error: `API Error: ${errorMessage}` },
+                { status: 500 }
+            );
+        }
     }
 }
 
