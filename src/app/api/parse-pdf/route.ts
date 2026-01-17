@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-// Simple PDF text extraction (for demo purposes)
-// In production, use pdf-parse package
 export async function POST(request: NextRequest) {
     try {
         const formData = await request.formData();
@@ -30,53 +28,26 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // For demo: Extract text using a simple approach
-        // In production, install pdf-parse: npm install pdf-parse
-        const bytes = await file.arrayBuffer();
-        const buffer = Buffer.from(bytes);
-
-        // Try to use pdf-parse if available
-        let text = '';
-        try {
-            // Dynamic import to handle if pdf-parse is not installed
-            const pdfParse = (await import('pdf-parse')).default;
-            const data = await pdfParse(buffer);
-            text = data.text;
-        } catch {
-            // Fallback: basic text extraction from PDF buffer
-            // This is a simplified approach - real implementation needs pdf-parse
-            const textContent = buffer.toString('utf-8');
-            // Try to find readable text in the PDF
-            const matches = textContent.match(/\/([A-Za-z\s,.\-@0-9]+)/g);
-            if (matches) {
-                text = matches.join(' ').replace(/\//g, '').substring(0, 5000);
-            }
-
-            // If no text found, return a message to install pdf-parse
-            if (!text || text.length < 50) {
-                return NextResponse.json({
-                    text: `[PDF text extraction requires pdf-parse package]
-          
-Please install it by running: npm install pdf-parse
-
-For now, you can paste your resume text manually.
-
-File received: ${file.name} (${(file.size / 1024).toFixed(1)} KB)`,
-                    pages: 1,
-                    info: { title: file.name }
-                });
-            }
-        }
+        // For this demo version, we'll ask users to paste text manually
+        // PDF parsing requires additional server configuration
+        // In production, you would use a service like pdf.js or a cloud function
 
         return NextResponse.json({
-            text,
+            text: `[PDF uploaded: ${file.name}]
+
+To use this app, please paste your resume text directly into this field.
+
+Why? PDF parsing in serverless environments (like Vercel) requires special configuration. For the best experience, copy and paste your resume text from your PDF.
+
+Tip: Open your PDF, press Ctrl+A to select all, then Ctrl+C to copy.`,
             pages: 1,
-            info: { title: file.name }
+            info: { title: file.name },
+            requiresManualInput: true
         });
     } catch (error) {
         console.error('PDF parsing error:', error);
         return NextResponse.json(
-            { error: 'Failed to parse PDF. Try installing pdf-parse: npm install pdf-parse' },
+            { error: 'Failed to process file. Please paste your resume text manually.' },
             { status: 500 }
         );
     }
