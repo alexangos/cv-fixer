@@ -53,8 +53,10 @@ export async function POST(request: NextRequest) {
         // Check for API key
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            // Return mock data for demo purposes
-            return NextResponse.json(getMockResponse(resumeText, jobDescription));
+            return NextResponse.json(
+                { error: 'API key not configured. Please add GEMINI_API_KEY to environment variables.' },
+                { status: 500 }
+            );
         }
 
         const genAI = new GoogleGenerativeAI(apiKey);
@@ -88,88 +90,36 @@ Analyze the resume against the job description and provide optimization suggesti
     } catch (error: unknown) {
         console.error('Optimization error:', error);
 
-        // Return more specific error message
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-        // If it's an API key issue, use mock data instead of failing
-        if (errorMessage.includes('API_KEY') || errorMessage.includes('api key') || errorMessage.includes('401')) {
+        // Rate limit error
+        if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('Too Many Requests')) {
             return NextResponse.json(
-                { error: 'Invalid API key. Please check your GEMINI_API_KEY in Vercel environment variables.' },
-                { status: 500 }
+                { error: 'Rate limit exceeded. Please wait 30-60 seconds and try again.' },
+                { status: 429 }
             );
         }
 
-        // Return mock data as fallback for other errors
-        try {
-            const { resumeText, jobDescription } = await request.clone().json();
-            return NextResponse.json(getMockResponse(resumeText, jobDescription));
-        } catch {
+        // API key error
+        if (errorMessage.includes('API_KEY') || errorMessage.includes('401') || errorMessage.includes('403')) {
             return NextResponse.json(
-                { error: `API Error: ${errorMessage}` },
-                { status: 500 }
+                { error: 'Invalid API key. Please check your GEMINI_API_KEY.' },
+                { status: 401 }
             );
         }
+
+        // Model not found
+        if (errorMessage.includes('404') || errorMessage.includes('not found')) {
+            return NextResponse.json(
+                { error: 'AI model not available. Please try again later.' },
+                { status: 503 }
+            );
+        }
+
+        // Generic error
+        return NextResponse.json(
+            { error: `API Error: ${errorMessage}` },
+            { status: 500 }
+        );
     }
-}
-
-// Mock response for demo when no API key is configured
-function getMockResponse(resumeText: string, jobDescription: string) {
-    const resumeWords = resumeText.toLowerCase().split(/\s+/);
-    const jobWords = jobDescription.toLowerCase().split(/\s+/);
-
-    // Simple keyword matching
-    const techKeywords = ['javascript', 'typescript', 'react', 'node', 'python', 'java', 'sql', 'aws', 'docker', 'kubernetes', 'git', 'agile', 'scrum', 'api', 'rest', 'graphql', 'mongodb', 'postgresql', 'redis', 'linux'];
-
-    const foundKeywords = techKeywords.filter(kw =>
-        resumeWords.some(w => w.includes(kw)) && jobWords.some(w => w.includes(kw))
-    );
-
-    const missingKeywords = techKeywords.filter(kw =>
-        jobWords.some(w => w.includes(kw)) && !resumeWords.some(w => w.includes(kw))
-    ).slice(0, 5);
-
-    const matchScore = Math.min(95, Math.max(45, 50 + foundKeywords.length * 8));
-
-    return {
-        matchScore,
-        keywordsFound: foundKeywords.slice(0, 8),
-        keywordsMissing: missingKeywords,
-        suggestions: [
-            {
-                section: "Professional Summary",
-                original: "Experienced software developer with a passion for building applications.",
-                improved: "Results-driven Software Engineer with expertise in building scalable web applications using modern technologies. Proven track record of delivering high-quality solutions.",
-                reason: "Added stronger action words and specificity"
-            },
-            {
-                section: "Experience",
-                original: "Worked on various projects and helped the team.",
-                improved: "Led development of customer-facing features, resulting in 25% improvement in user engagement. Collaborated with cross-functional teams to deliver projects on schedule.",
-                reason: "Added quantifiable achievements and action verbs"
-            },
-            {
-                section: "Skills",
-                original: "Good at programming",
-                improved: "Technical Skills: JavaScript, TypeScript, React, Node.js, SQL, Git. Soft Skills: Team Leadership, Problem Solving, Communication",
-                reason: "Made skills specific and categorized"
-            }
-        ],
-        optimizedSections: {
-            summary: "Dynamic and results-oriented professional with proven expertise in software development. Skilled in modern technologies with a track record of delivering impactful solutions that drive business growth.",
-            experience: [
-                "Developed and maintained web applications using React and Node.js, improving performance by 30%",
-                "Collaborated with product teams to define requirements and deliver features on schedule",
-                "Implemented automated testing, reducing bug rates by 40%"
-            ],
-            skills: ["JavaScript", "TypeScript", "React", "Node.js", "SQL", "Git", "Agile", "Problem Solving"],
-            education: ["Bachelor's in Computer Science"]
-        },
-        warnings: [
-            "Consider adding more quantifiable achievements to your experience section",
-            "Your resume could benefit from ATS-friendly formatting"
-        ],
-        learningRecommendations: missingKeywords.length > 0
-            ? [`Consider learning: ${missingKeywords.join(', ')}`]
-            : ["Your skills align well with this position"]
-    };
 }
